@@ -16,23 +16,31 @@ from .models import FriendRequest, Friendship
 def signup(request):
     email = request.data.get('email')
     password = request.data.get('password')
-    
+    username = request.data.get('username')
+    print(email)
+    print(password)
+    print(username)
     if User.objects.filter(email=email).exists():
         return Response({"error": "User with this email already exists."}, status=status.HTTP_400_BAD_REQUEST)
-    
-    user = User(email=email, password=make_password(password))
+    user = User(email=email, username=username, password=make_password(password))
     user.save()
-    
-    return Response({"message": "User created successfully."}, status=status.HTTP_201_CREATED)
+    return Response({
+        "message": "User created successfully.",
+        "id":user.id
+        }, status=status.HTTP_201_CREATED)
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
-    email = request.data.get('email')
+    username = request.data.get('username')
     password = request.data.get('password')
+
+    print(password)
+    print(username)
     
-    user = authenticate(username=email, password=password)
+    user = authenticate(username=username, password=password)
+    print(user)
     
     if user is not None:
         token, _ = Token.objects.get_or_create(user=user)
@@ -50,13 +58,13 @@ def user_search(request):
         if(user):
             return Response({"user": user.email})
     else:
-        users = User.object.filter(
+        users = User.objects.filter(
             Q(username__icontains=keyword) |
             Q(first_name__icontains=keyword) |
             Q(last_name__icontains=keyword)
         )
         paginator = Paginator(users, 10)
-        page = request.query_parametes.get('page', 1)
+        page = request.query_params.get('page', 1)
         users_page = paginator.get_page(page)
         users_list = [{
             'username': user.username, 
@@ -71,22 +79,22 @@ def user_search(request):
 @throttle_classes(['user'])
 def friend_request_action(request):
     action = request.data.get('action')
-    target_user_id = request.data.get('target_user_id')
+    to_user = request.data.get('to_user')
 
     if action == 'send':
-        return send_friend_request(request, target_user_id)
+        return send_friend_request(request, to_user)
     elif action == 'accept':
-        return accept_friend_request(request, target_user_id)
+        return accept_friend_request(request, to_user)
     elif action == 'reject':
-        return reject_friend_request(request, target_user_id)
+        return reject_friend_request(request, to_user)
     else:
         return Response({"error": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def send_friend_request(request, target_user_id):
+def send_friend_request(request, to_user):
     try:
-        target_user = User.objects.get(id=target_user_id)
+        target_user = User.objects.get(username=to_user)
     except User.DoesNotExist:
         return Response({"error": "Target user not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -101,9 +109,9 @@ def send_friend_request(request, target_user_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def accept_friend_request(request, target_user_id):
+def accept_friend_request(request, target_user):
     try:
-        friend_request = FriendRequest.objects.get(from_user=target_user_id, to_user=request.user, status='pending')
+        friend_request = FriendRequest.objects.get(from_user=target_user, to_user=request.user, status='pending')
     except FriendRequest.DoesNotExist:
         return Response({"error": "Pending friend request not found."}, status=status.HTTP_404_NOT_FOUND)
 
